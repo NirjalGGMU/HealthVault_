@@ -54,6 +54,8 @@ const TextCaptcha = forwardRef<TextCaptchaHandle, TextCaptchaProps>(
               {t('captcha.loadError')}
             </div>
           ) : (
+            // Only HTML-injection sink in the app: svg is a server-generated CAPTCHA
+            // image, never user-supplied data, so injecting it here is safe.
             <div
               className="flex h-[60px] w-[160px] items-center justify-center overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-600"
               aria-hidden="true"

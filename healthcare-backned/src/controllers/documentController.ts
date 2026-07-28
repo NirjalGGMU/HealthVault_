@@ -106,6 +106,8 @@ export const downloadDocument = async (req: Request, res: Response): Promise<voi
       res.status(404).json({ message: 'Document not found' });
       return;
     }
+    // Server-side ownership check — blocks IDOR: only the uploading owner may
+    // download this document, regardless of what document id the client requests.
     if (String(doc.ownerId) !== req.user.id) {
       logger.warn(`VAULT: user ${req.user.id} denied download of document ${id} (not owner)`);
       res.status(403).json({ message: 'Forbidden: you do not own this document' });
@@ -162,6 +164,8 @@ export const deleteDocument = async (req: Request, res: Response): Promise<void>
       res.status(404).json({ message: 'Document not found' });
       return;
     }
+    // Server-side ownership check — blocks IDOR: only the uploading owner may
+    // delete this document, regardless of what document id the client requests.
     if (String(doc.ownerId) !== req.user.id) {
       logger.warn(`VAULT: user ${req.user.id} denied delete of document ${id} (not owner)`);
       res.status(403).json({ message: 'Forbidden: you do not own this document' });

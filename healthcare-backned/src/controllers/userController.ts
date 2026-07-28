@@ -40,6 +40,8 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
+    // Explicit field allow-list: only name/email are read from the request body,
+    // so role, password, lock state, and MFA fields can never be mass-assigned here.
     const { name, email } = req.body as { name?: string; email?: string };
     const updates: { name?: string; email?: string } = {};
 

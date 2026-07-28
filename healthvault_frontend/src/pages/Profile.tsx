@@ -177,6 +177,8 @@ const Profile = () => {
             className="h-16 w-16 rounded-full border border-gray-200 bg-gray-100 object-cover dark:border-gray-600 dark:bg-gray-700"
             style={!avatarPreview && !profile?.avatarUrl ? { display: 'none' } : undefined}
           />
+          {/* React JSX escapes interpolated values automatically: profile?.name is
+              rendered as inert text, never parsed as HTML/script (context-aware output encoding). */}
           {!avatarPreview && !profile?.avatarUrl && (
             <div className="flex h-16 w-16 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-xl font-semibold text-gray-400 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400">
               {profile?.name?.[0]?.toUpperCase() ?? '?'}
