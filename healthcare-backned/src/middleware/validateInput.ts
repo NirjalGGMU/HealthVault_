@@ -19,6 +19,8 @@ export const handleValidationErrors = (
 
 /** Registration: name, email, strong password, optional constrained role */
 export const registerValidation: ValidationChain[] = [
+  // Server-side validation of the free-text name field, then HTML-escapes it
+  // so stored values can never execute as markup/script (stored XSS defence).
   body('name')
     .trim()
     .notEmpty()
@@ -42,6 +44,8 @@ export const registerValidation: ValidationChain[] = [
     .withMessage('Password must contain a number')
     .matches(/[^A-Za-z0-9]/)
     .withMessage('Password must contain a special character'),
+  // Role whitelist: restricts self-registration to doctor/patient only — "admin"
+  // is not an accepted value here, closing off privilege escalation via this field.
   body('role')
     .optional()
     .isIn(['doctor', 'patient'])
