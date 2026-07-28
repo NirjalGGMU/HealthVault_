@@ -17,13 +17,36 @@ const TOKEN_MAX_AGE_MS = 3600000; // 1 hour, matches TOKEN_EXPIRY
 const MFA_TEMP_TOKEN_EXPIRY = '5m';
 const MFA_TEMP_MAX_AGE_MS = 5 * 60 * 1000;
 
+/**
+ * WB-02 fix: echoing reset / magic-link tokens in the HTTP response is now
+ * gated on an EXPLICIT opt-in flag and fails closed. Previously this was gated
+ * only on `NODE_ENV !== 'production'`, so an unset, mistyped, or mis-cased
+ * NODE_ENV silently disclosed working account-takeover tokens to any caller.
+ * The echo path now requires BOTH an explicit ALLOW_DEV_TOKEN_ECHO=true AND
+ * NODE_ENV=development, and warns loudly at startup when enabled.
+ */
+// Fail-closed guard: token echoing requires an explicit opt-in AND dev mode —
+// an unset/misconfigured NODE_ENV can no longer silently leak reset/magic-link tokens.
+const DEV_TOKEN_ECHO_ENABLED =
+  process.env.ALLOW_DEV_TOKEN_ECHO === 'true' && process.env.NODE_ENV === 'development';
+if (DEV_TOKEN_ECHO_ENABLED) {
+  logger.warn(
+    'SECURITY: ALLOW_DEV_TOKEN_ECHO is enabled — reset/magic-link tokens are echoed in API responses. NEVER enable this outside local development.'
+  );
+}
+
 /** Binds the issued JWT to the requesting browser's User-Agent fingerprint */
+// Session bound to password version: also stamps pwdVersion (passwordChangedAt)
+// so that changing the password invalidates every existing session token.
 const signToken = (user: IUser, req: Request, mfaPending = false): string => {
   return jwt.sign(
     {
       id: String(user._id),
       role: user.role,
       uaHash: hashUserAgent(req),
+      // WB-01 fix: stamp the password version so protect() can reject this
+      // session once the password changes (passwordChangedAt advances).
+      pwdVersion: new Date(user.passwordChangedAt ?? 0).getTime(),
       ...(mfaPending ? { mfaPending: true } : {}),
     },
     getJwtSecret(),
@@ -103,8 +126,10 @@ export const loginPrecheck = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const user = await User.findOne({ email: email.trim().toLowerCase() }).select('mfaEnabled');
-    res.status(200).json({ captchaRequired: !user || !user.mfaEnabled });
+    // WB-05 fix: always report CAPTCHA as required. The response no longer
+    // depends on whether the account exists or has MFA enabled, so it can no
+    // longer be used as an oracle to enumerate accounts or MFA status.
+    res.status(200).json({ captchaRequired: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     logger.error(`Login precheck error: ${message}`);
@@ -133,10 +158,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     const user = await User.findOne({ email }).select('+password');
 
-    // Unknown accounts are treated as requiring CAPTCHA too (see loginPrecheck) —
-    // this decision must never itself become a way to distinguish "exists
-    // without MFA" from "doesn't exist".
-    const captchaRequired = !user || !user.mfaEnabled;
+    // WB-05/WB-10 fix: CAPTCHA is now enforced unconditionally for every login,
+    // regardless of account existence or MFA status. Previously MFA-enabled
+    // accounts skipped CAPTCHA, which (a) let attackers brute-force them without
+    // a challenge (WB-10) and (b) turned CAPTCHA presence into an oracle that
+    // leaked whether an account had MFA enabled (WB-05).
+    const captchaRequired = true;
 
     if (captchaRequired) {
       const recaptchaResult = await checkRecaptcha(req);
@@ -397,7 +424,7 @@ export const requestMagicLink = async (req: Request, res: Response): Promise<voi
     res.status(200).json({
       ...generic,
       // Fallback only: lets the flow work without real SMTP creds in dev/coursework environments
-      ...(!emailSent && process.env.NODE_ENV !== 'production' ? { devMagicLink: magicLink } : {}),
+      ...(!emailSent && DEV_TOKEN_ECHO_ENABLED ? { devMagicLink: magicLink } : {}),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -538,7 +565,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     res.status(200).json({
       ...generic,
       // Fallback only: lets the flow work without real SMTP creds in dev/coursework environments
-      ...(!emailSent && process.env.NODE_ENV !== 'production' ? { devResetLink: resetLink } : {}),
+      ...(!emailSent && DEV_TOKEN_ECHO_ENABLED ? { devResetLink: resetLink } : {}),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
