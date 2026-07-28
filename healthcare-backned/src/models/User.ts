@@ -44,6 +44,8 @@ const userSchema = new Schema<IUser>(
       trim: true,
       index: true,
     },
+    // Password hash is never returned by default — callers must explicitly
+    // .select('+password') to access it, minimizing accidental exposure.
     password: {
       type: String,
       required: [true, 'Password is required'],
@@ -73,6 +75,8 @@ const userSchema = new Schema<IUser>(
 // password (not initial registration) are responsible for pushing the
 // outgoing hash into passwordHistory themselves before reassigning
 // `password` — see userController.changePassword.
+// bcrypt cost factor 12 with a unique salt generated per password (bcrypt.genSalt) —
+// slow, salted hashing defeats rainbow tables and brute-force cracking.
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) {
     next();
