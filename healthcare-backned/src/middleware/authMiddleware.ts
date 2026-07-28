@@ -9,6 +9,10 @@ export interface AuthTokenPayload extends JwtPayload {
   role: string;
   mfaPending?: boolean;
   uaHash?: string;
+  // WB-01 fix: password version stamped at login. When the user resets/changes
+  // their password, passwordChangedAt advances and this no longer matches, so
+  // sessions issued before the change are rejected in protect().
+  pwdVersion?: number;
 }
 
 /**
@@ -93,6 +97,19 @@ export const protect = async (
     if (decoded.uaHash && decoded.uaHash !== hashUserAgent(req)) {
       logger.warn(`AUTH: session device-fingerprint mismatch for user ${decoded.id} from IP ${req.ip}`);
       res.status(401).json({ message: 'Session bound to a different device — please log in again' });
+      return;
+    }
+
+    // WB-01 fix: invalidate sessions issued before the last password change.
+    // A password reset/change is the primary way a user evicts an attacker who
+    // holds a stolen session; comparing the token's pwdVersion against the live
+    // passwordChangedAt makes that eviction actually take effect.
+    if (
+      decoded.pwdVersion !== undefined &&
+      decoded.pwdVersion !== new Date(user.passwordChangedAt ?? 0).getTime()
+    ) {
+      logger.warn(`AUTH: session invalidated by password change for user ${decoded.id} from IP ${req.ip}`);
+      res.status(401).json({ message: 'Session invalidated by a password change — please log in again' });
       return;
     }
 
