@@ -20,6 +20,7 @@ export const globalLimiter = rateLimit({
 /**
  * Login limiter (brute force protection): 5 requests per 15 minutes per IP.
  */
+// Login rate limit — brute-force defence: caps password-guessing attempts per IP.
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
@@ -42,6 +43,7 @@ export const loginLimiter = rateLimit({
  * threshold intends. Keyed to the same 5-minute window as the mfaPending
  * cookie itself, so a blocked attacker can't outlast their own temp token.
  */
+// OTP/MFA rate limit — TOTP brute-force defence: caps 6-digit code-guessing attempts per IP.
 export const otpLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 5,
