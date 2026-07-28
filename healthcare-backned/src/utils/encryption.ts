@@ -5,6 +5,8 @@ import logger from '../config/logger';
 // Extracted from appointmentController.ts so the vault document feature can
 // reuse the exact same algorithm/key derivation instead of inventing new crypto.
 
+// AES-256-GCM: authenticated encryption used for the document vault. The key
+// is derived from ENCRYPTION_KEY via scrypt (getPrimaryKey), never stored in plaintext.
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 const KEY_SALT = 'healthvault-notes-salt';
 
@@ -74,6 +76,8 @@ export const decryptNotes = (payload: string): string => {
  * The IV (12 bytes) and auth tag (16 bytes) are prefixed onto the ciphertext
  * so the whole thing is a single self-contained buffer safe to write to disk.
  */
+// Encrypts vault document bytes with AES-256-GCM; the IV + auth tag are
+// prefixed to the ciphertext so any tampering is detected on decrypt.
 export const encryptBuffer = (plainBuffer: Buffer): Buffer => {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, getPrimaryKey(), iv);
